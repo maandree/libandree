@@ -37,11 +37,6 @@ public class EnclumpUCSOutputFilter implements OutputFilter
     private OutputFilter nextFilter = null;
     
     /**
-     * The current state of the filter
-     */
-    private int state = 0;
-    
-    /**
      * The length of the sequence
      */
     private int len = 0;
@@ -62,35 +57,26 @@ public class EnclumpUCSOutputFilter implements OutputFilter
 	if (this.nextFilter == null)
 	    throw new RuntimeException("Premature end of output filter chain");
 	
-	//Error detection is not implemented
-	if (state == 0)
+	if ((b & 0x80) == 0)
+	    this.nextFilter.filterWrite(b);
+	else if ((b & 0xC0) == 0xC0)
 	{
-	    if ((b & 128) == 0)
-		this.nextFilter.filterWrite(b);
-	    else
-		do
-		{
-		    len = 0;
-		    if ((b & 128) != 0)  len++;  else  break;
-		    if ((b &  64) != 0)  len++;  else  break;
-		    if ((b &  32) != 0)  len++;  else  break;
-		    if ((b &  16) != 0)  len++;  else  break;
-		    if ((b &   8) != 0)  len++;  else  break;
-		    if ((b &   4) != 0)  len++;
-		}
-		  while (false);
-	    
-	    data = (b << len) >> len;
+	    len = 0;
+	    data = b;
+	    while ((data & 0x80) == 0x80)
+	    {
+		len++;
+		data <<= 1;
+	    }
+	    data = (data & 0xFF) >> len--;
 	}
 	else
-	    data = (data << 6) | (b & 63);
-	
-	state++;
-	if (state == len)
-	{
-	    state = 0;
-	    this.nextFilter.filterWrite(b);
-	}
+	    if (len > 0)
+	    {
+		data = (data << 6) | (b & 63);
+		if (--len == 0)
+		    this.nextFilter.filterWrite(data);
+	    }
     }
     
     /**

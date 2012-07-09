@@ -36,6 +36,11 @@ public class DeclumpUCSOutputFilter implements OutputFilter
      */
     private OutputFilter nextFilter = null;
     
+    /**
+     * Small data buffer
+     */
+    private final int[] buf = new int[6];
+    
     
     
     /**
@@ -47,46 +52,31 @@ public class DeclumpUCSOutputFilter implements OutputFilter
 	if (this.nextFilter == null)
 	    throw new RuntimeException("Premature end of output filter chain");
 	
-	final long bb = ((long)b) & (long)(((int)-1) >>> 1);
-	
-	if (bb < (1 << 7))        //7
-	{
+	if (b < 0x80)
 	    this.nextFilter.filterWrite(b);
-	}
-	else if (bb < (1 << 11))  //5+6
+	else
 	{
-	    this.nextFilter.filterWrite(192 | (b >>> 6));
-	    this.nextFilter.filterWrite(128 | (b & 63));
-	}
-	else if (bb < (1 << 16))  //4+6+6
-	{
-	    this.nextFilter.filterWrite(224 | (b >>> 12));
-	    this.nextFilter.filterWrite(128 | ((b >> 6) & 63));
-	    this.nextFilter.filterWrite(128 | (b & 63));
-	}
-	else if (bb < (1 << 21))  //3+6+6+6
-	{
-	    this.nextFilter.filterWrite(240 | (b >>> 18));
-	    this.nextFilter.filterWrite(128 | ((b >> 12) & 63));
-	    this.nextFilter.filterWrite(128 | ((b >> 6) & 63));
-	    this.nextFilter.filterWrite(128 | (b & 63));
-	}
-	else if (bb < (1 << 26))  //2+6+6+6+6
-	{
-	    this.nextFilter.filterWrite(248 | (b >>> 24));
-	    this.nextFilter.filterWrite(128 | ((b >> 18) & 63));
-	    this.nextFilter.filterWrite(128 | ((b >> 12) & 63));
-	    this.nextFilter.filterWrite(128 | ((b >> 6) & 63));
-	    this.nextFilter.filterWrite(128 | (b & 63));
-	}
-	else                      //1+6+6+6+6+6
-	{
-	    this.nextFilter.filterWrite(252 | (b >>> 30));
-	    this.nextFilter.filterWrite(128 | ((b >> 24) & 63));
-	    this.nextFilter.filterWrite(128 | ((b >> 18) & 63));
-	    this.nextFilter.filterWrite(128 | ((b >> 12) & 63));
-	    this.nextFilter.filterWrite(128 | ((b >> 6) & 63));
-	    this.nextFilter.filterWrite(128 | (b & 63));
+	    int m = 0x100;
+	    int d = b;
+	    int ptr = 0;
+	    for (;;)
+	    {
+		m |= m >> 1;
+		this.buf[ptr++] = d & 63;
+		d >>>= 6;
+		if (d == 0)
+		{
+		    m >>= 1;
+		    if ((m & this.buf[ptr - 1]) == 0)
+			this.buf[ptr - 1] |= (m << 1) & 0xFF;
+		    else
+			this.buf[ptr++] = m;
+		    break;
+		}
+	    }
+	    
+	    while (ptr > 0)
+		this.nextFilter.filterWrite(this.buf[--ptr] | 128);
 	}
     }
     
